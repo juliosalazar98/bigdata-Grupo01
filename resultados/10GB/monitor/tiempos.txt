@@ -1,0 +1,59 @@
+
+BLOQUES DEL DATASET 10GB SUB-REPLICADOS EN EL MOMENTO DE LA FALLA (solo con 1 replica viva)
+   bloque 1   blk_1073741851         repl=1  DN3
+   bloque 2   blk_1073741852         repl=1  DN1
+   bloque 5   blk_1073741855         repl=1  DN3
+   bloque 7   blk_1073741857         repl=1  DN1
+   bloque 8   blk_1073741858         repl=1  DN3
+   bloque 10  blk_1073741860         repl=1  DN3
+   bloque 12  blk_1073741862         repl=1  DN3
+   bloque 14  blk_1073741864         repl=1  DN1
+   bloque 16  blk_1073741866         repl=1  DN1
+   bloque 17  blk_1073741867         repl=1  DN3
+   bloque 18  blk_1073741868         repl=1  DN1
+   bloque 19  blk_1073741869         repl=1  DN1
+   bloque 20  blk_1073741870         repl=1  DN3
+   bloque 21  blk_1073741871         repl=1  DN3
+   bloque 22  blk_1073741872         repl=1  DN3
+   bloque 24  blk_1073741874         repl=1  DN3
+   bloque 25  blk_1073741875         repl=1  DN3
+   bloque 30  blk_1073741880         repl=1  DN3
+   bloque 32  blk_1073741882         repl=1  DN1
+   bloque 34  blk_1073741884         repl=1  DN1
+   bloque 36  blk_1073741886         repl=1  DN3
+   bloque 37  blk_1073741887         repl=1  DN1
+   bloque 38  blk_1073741888         repl=1  DN3
+   bloque 40  blk_1073741890         repl=1  DN3
+   bloque 41  blk_1073741891         repl=1  DN3
+   bloque 44  blk_1073741894         repl=1  DN1
+   bloque 46  blk_1073741896         repl=1  DN1
+   bloque 47  blk_1073741897         repl=1  DN3
+   bloque 48  blk_1073741898         repl=1  DN3
+   bloque 49  blk_1073741899         repl=1  DN1
+   bloque 53  blk_1073741903         repl=1  DN3
+   bloque 54  blk_1073741904         repl=1  DN3
+   bloque 55  blk_1073741905         repl=1  DN1
+   bloque 57  blk_1073741907         repl=1  DN1
+   bloque 58  blk_1073741908         repl=1  DN1
+   bloque 59  blk_1073741909         repl=1  DN3
+   bloque 62  blk_1073741912         repl=1  DN3
+   bloque 64  blk_1073741914         repl=1  DN3
+   bloque 65  blk_1073741915         repl=1  DN3
+   bloque 66  blk_1073741916         repl=1  DN3
+   bloque 67  blk_1073741917         repl=1  DN3
+   bloque 68  blk_1073741918         repl=1  DN1
+   bloque 71  blk_1073741921         repl=1  DN1
+   bloque 72  blk_1073741922         repl=1  DN3
+   bloque 73  blk_1073741923         repl=1  DN1
+   bloque 74  blk_1073741924         repl=1  DN1
+   bloque 76  blk_1073741926         repl=1  DN1
+   bloque 77  blk_1073741927         repl=1  DN1
+   bloque 78  blk_1073741928         repl=1  DN1
+
+TIEMPOS DEL DATASET 10GB (desde que se detuvo DN2)
+   Paso a STALE                        : 46 s
+   Marcado como MUERTO                 : 85 s
+   Replicas de DN2 eliminadas del mapa: 106 s
+   Re-replicacion completa             : 288 s
+   Duracion de la re-replicacion       : 182 s
+   Maximo de bloques sub-replicados del dataset: 49

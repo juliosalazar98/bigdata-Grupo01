@@ -1,0 +1,36 @@
+==================================================================
+ GRUPO 01 - LG15 - DATASET 1GB - ESTADO: DESPUES - 2026-10-09 20:44:58
+==================================================================
+
+1) ESTADO DE LOS DATANODES
+   DN1  hadoopnode   172.22.0.6      VIVO
+   DN2  hadoopnode2  172.22.0.4      MUERTO
+   DN3  hadoopnode3  172.22.0.5      VIVO
+
+2) ESTADO DEL ARCHIVO  /grupo01/dataset_1GB/dataset_grupo01_1GB
+   Estado HDFS (fsck)        : HEALTHY
+   Total de bloques          : 8 (avg. block size 134217728 B)
+   Replicacion configurada   : 2
+   Replicacion promedio      : 2.0
+   Bloques sub-replicados    : 0 (0.0 %)
+   Bloques sobre-replicados  : 0 (0.0 %)
+   Bloques faltantes         : 0
+   Bloques corruptos         : 0
+
+3) REPLICAS POR DATANODE (que bloques guarda cada uno)
+   DN1    8 replicas -> bloques: 0 1 2 3 4 5 6 7
+   DN3    8 replicas -> bloques: 0 1 2 3 4 5 6 7
+
+4) DETALLE DE BLOQUES (bloque, id, replicas vivas, ubicacion)
+   0   blk_1073741842         repl=2  DN3,DN1
+   1   blk_1073741843         repl=2  DN3,DN1
+   2   blk_1073741844         repl=2  DN3,DN1
+   3   blk_1073741845         repl=2  DN3,DN1
+   4   blk_1073741846         repl=2  DN3,DN1
+   5   blk_1073741847         repl=2  DN1,DN3
+   6   blk_1073741848         repl=2  DN3,DN1
+   7   blk_1073741849         repl=2  DN1,DN3
+
+5) ACCESO AL ARCHIVO
+   Checksum: MD5-of-262144MD5-of-512CRC32C 00000200000000000004000073f8910e99b1d86bd029de245ccbb489
+   Lectura completa: 1073741824 bytes en 6 s

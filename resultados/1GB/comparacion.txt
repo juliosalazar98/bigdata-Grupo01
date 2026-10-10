@@ -1,0 +1,15 @@
+==================================================================
+ GRUPO 01 - LG15 - DATASET 1GB - COMPARACION ANTES / DESPUES DE LA FALLA - 2026-10-09 20:45:13
+==================================================================
+   BLOQUE ANTES        DESPUES      PERDIDA    NUEVA REPLICA EN
+   0      DN2,DN3      DN3,DN1      DN2        DN1
+   1      DN2,DN3      DN3,DN1      DN2        DN1
+   3      DN2,DN3      DN3,DN1      DN2        DN1
+   4      DN2,DN3      DN3,DN1      DN2        DN1
+   6      DN2,DN3      DN3,DN1      DN2        DN1
+   7      DN2,DN1      DN1,DN3      DN2        DN3
+
+   Bloques del archivo         : 8
+   Bloques afectados por la falla: 6
+   Nuevas replicas creadas en DN1: 5
+   Nuevas replicas creadas en DN3: 1

@@ -1,0 +1,84 @@
+Configured Capacity: 3243303530496 (2.95 TB)
+Present Capacity: 3053839028189 (2.78 TB)
+DFS Remaining: 3051669852160 (2.78 TB)
+DFS Used: 2169176029 (2.02 GB)
+DFS Used%: 0.07%
+Replicated Blocks:
+	Under replicated blocks: 0
+	Blocks with corrupt replicas: 0
+	Missing blocks: 0
+	Missing blocks (with replication factor 1): 0
+	Badly Distributed Blocks: 0
+	Low redundancy blocks with highest priority to recover: 0
+	Pending deletion blocks: 0
+Erasure Coded Block Groups: 
+	Low redundancy block groups: 0
+	Block groups with corrupt internal blocks: 0
+	Missing block groups: 0
+	Badly Distributed Blocks: 0
+	Low redundancy blocks with highest priority to recover: 0
+	Pending deletion blocks: 0
+
+-------------------------------------------------
+Live datanodes (3):
+
+Name: 172.22.0.4:9866 (hadoop-sandbox-datanode2-1.hadoop-sandbox_default)
+Hostname: hadoopnode2
+Decommission Status : Normal
+Configured Capacity: 1081101176832 (1006.85 GB)
+DFS Used: 811683840 (774.08 MB)
+Non DFS Used: 8073867264 (7.52 GB)
+DFS Remaining: 1017223270400 (947.36 GB)
+DFS Used%: 0.08%
+DFS Remaining%: 94.09%
+Configured Cache Capacity: 0 (0 B)
+Cache Used: 0 (0 B)
+Cache Remaining: 0 (0 B)
+Cache Used%: 100.00%
+Cache Remaining%: 0.00%
+Xceivers: 0
+Last contact: Sat Oct 10 00:53:20 UTC 2026
+Last Block Report: Sat Oct 10 00:53:12 UTC 2026
+Num of Blocks: 6
+
+
+Name: 172.22.0.5:9866 (hadoop-sandbox-datanode3-1.hadoop-sandbox_default)
+Hostname: hadoopnode3
+Decommission Status : Normal
+Configured Capacity: 1081101176832 (1006.85 GB)
+DFS Used: 1082212359 (1.01 GB)
+Non DFS Used: 7803297785 (7.27 GB)
+DFS Remaining: 1017223311360 (947.36 GB)
+DFS Used%: 0.10%
+DFS Remaining%: 94.09%
+Configured Cache Capacity: 0 (0 B)
+Cache Used: 0 (0 B)
+Cache Remaining: 0 (0 B)
+Cache Used%: 100.00%
+Cache Remaining%: 0.00%
+Xceivers: 0
+Last contact: Sat Oct 10 00:53:20 UTC 2026
+Last Block Report: Fri Oct 09 23:55:41 UTC 2026
+Num of Blocks: 8
+
+
+Name: 172.22.0.6:9866 (hadoop-sandbox-datanode-1.hadoop-sandbox_default)
+Hostname: hadoopnode
+Decommission Status : Normal
+Configured Capacity: 1081101176832 (1006.85 GB)
+DFS Used: 275279830 (262.53 MB)
+Non DFS Used: 8610271274 (8.02 GB)
+DFS Remaining: 1017223270400 (947.36 GB)
+DFS Used%: 0.03%
+DFS Remaining%: 94.09%
+Configured Cache Capacity: 0 (0 B)
+Cache Used: 0 (0 B)
+Cache Remaining: 0 (0 B)
+Cache Used%: 100.00%
+Cache Remaining%: 0.00%
+Xceivers: 0
+Last contact: Sat Oct 10 00:53:21 UTC 2026
+Last Block Report: Fri Oct 09 23:42:06 UTC 2026
+Num of Blocks: 12
+
+
