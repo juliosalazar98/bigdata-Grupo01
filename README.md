@@ -296,3 +296,7 @@ sandbox-01/
 - Los tres DataNodes corren en la misma PC y comparten su disco físico. En un clúster real cada DataNode estaría en otra máquina, y la re-replicación dependería también de la red.
 - Las horas de las salidas están en hora de Bolivia (UTC−4). Los registros internos de Hadoop usan UTC.
 - El repositorio base hadoop-sandbox no se incluye aquí; se clona desde su repositorio original (ver Instalación).
+
+---
+
+Práctica LG15 · Tecnologías Emergentes I · GRUPO 01 · Universidad del Valle · Cochabamba, 2026
