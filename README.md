@@ -1,302 +1,455 @@
-# sandbox-01 · LG15 – Tolerancia a fallos y replicación de datos en HDFS
+# Tolerancia a fallos y replicación de datos en HDFS
 
-**Universidad del Valle** · Tecnologías Emergentes I · **GRUPO 01**
+Práctica **LG15 · Grupo 01**. Se desplegó un clúster Hadoop HDFS con Docker Compose y se realizaron dos pruebas con datasets de **1 GB y 10 GB**, deteniendo un DataNode en cada experimento. Ambos archivos permanecieron disponibles y HDFS recuperó automáticamente sus réplicas.
 
-| Integrantes |
-|---|
-| Edson Marcelo Cayo Ali |
-| Joel Julio Salazar Ferrufino |
-| Alex Bryam Barrera Alarcon |
+## Contenido
 
----
+- [Arquitectura y configuración](#1-arquitectura-y-configuración)
+- [Instalación y preparación](#2-instalación-y-preparación)
+- [Pruebas de fallo](#3-pruebas-de-fallo)
+- [Comparación y análisis](#4-comparación-y-análisis)
+- [Evidencias](#5-evidencias)
+- [Preguntas](#6-preguntas)
+- [Conclusiones](#7-conclusiones)
 
-## 1. Descripción
+## 1. Arquitectura y configuración
 
-Implementamos un clúster **Hadoop HDFS con 1 NameNode y 3 DataNodes**, con **factor de replicación 2**, sobre Docker. Cargamos dos datasets (**1 GB** y **10 GB**) y con cada uno hicimos una **prueba de fallo**: detuvimos un DataNode (DN2) y registramos, con evidencias, el estado de los bloques y réplicas **antes, durante y después** de la caída.
+El entorno se basa en Hadoop Sandbox, ampliado con dos DataNodes adicionales en [docker-compose.yaml](docker-compose.yaml). El NameNode administra los metadatos y la ubicación de los bloques; los DataNodes almacenan los datos y sus réplicas.
 
-El entorno se basa en el repositorio [hadoop-sandbox/hadoop-sandbox](https://github.com/hadoop-sandbox/hadoop-sandbox) (Hadoop 3.5.0), que trae un solo DataNode. Lo ampliamos con:
+| Componente | Configuración utilizada |
+| --- | --- |
+| NameNode | 1, servicio `namenode` |
+| DataNodes | 3: `datanode` (DN1, hostname `hadoopnode`), `datanode2` (DN2) y `datanode3` (DN3) |
+| Nodo cliente | `clientnode`, usuario `sandbox` |
+| Factor de replicación | 2 |
+| Tamaño de bloque | 128 MiB |
+| Datasets | 1.000.000.000 y 10.000.000.000 bytes, generados con `/dev/zero` |
+| Directorio HDFS | `/grupo01` |
 
-- `config/docker-compose.override.yml`: agrega **DN2** y **DN3**, cada uno con su propio volumen.
-- `config/hdfs-site.xml`: replicación **2** y detección más rápida de nodos caídos.
-- `scripts/lg15.sh`: registra el estado del clúster, monitorea la falla segundo a segundo y compara la ubicación de los bloques antes y después.
+La propiedad `dfs.replication` está configurada en `2` en [conf/hadoop/hdfs-site.xml](conf/hadoop/hdfs-site.xml). El Compose conserva los servicios complementarios de Hadoop Sandbox; estas pruebas se centran en HDFS.
 
-## 2. Requerimientos de la práctica
+### Diagrama de arquitectura
 
-| Componente | Requerido | Implementado |
-|---|---|---|
-| NameNode | 1 | 1 (`namenode`) |
-| DataNodes | 3 | 3: DN1 `hadoopnode`, DN2 `hadoopnode2`, DN3 `hadoopnode3` |
-| Factor de replicación | ≥ 2 | **2** (`dfs.replication`) |
-| Dataset 1 | 1 GB | `/grupo01/dataset_1GB/dataset_grupo01_1GB` (1 073 741 824 B) |
-| Dataset 2 | 10 GB | `/grupo01/dataset_10GB/dataset_grupo01_10GB` (10 737 418 240 B) |
-| Pruebas de fallo | 2 | Caída de DN2 con el dataset de 1 GB y con el de 10 GB |
-| Evidencias | Obligatorio | [`evidencias/`](evidencias/) (capturas) y [`resultados/`](resultados/) (salidas completas) |
-| Identificación del grupo | `/grupoXX/` | `/grupo01/` con `dataset_1GB`, `dataset_10GB`, `resultados`, `evidencias`; cada registro de los datasets empieza con `grupo01` |
+```mermaid
+flowchart LR
+    subgraph DC["Docker Compose - Hadoop Sandbox Grupo 01"]
+        Client["clientnode<br/>Cliente Hadoop/Spark<br/>SSH: 2222"]
 
-## 3. Arquitectura
+        subgraph HDFS["HDFS - Replicación 2"]
+            NN["namenode<br/>UI: 9870"]
+            DN1["datanode<br/>DN1"]
+            DN2["datanode2<br/>DN2"]
+            DN3["datanode3<br/>DN3"]
+        end
 
-![Arquitectura](diagrama/arquitectura.png)
+        subgraph YARN["YARN"]
+            RM["resourcemanager<br/>UI: 8088"]
+            NM["nodemanager<br/>UI: 8042"]
+        end
 
-| Nodo | Servicio Docker | Hostname | Función |
-|---|---|---|---|
-| NameNode | `namenode` | namenode | Guarda los metadatos (qué bloques forman cada archivo y en qué DataNodes está cada réplica), recibe los latidos y ordena la re-replicación |
-| DN1 | `datanode` | hadoopnode | Guarda bloques. Comparte red con el NodeManager de YARN |
-| DN2 | `datanode2` | hadoopnode2 | Guarda bloques. **Es el nodo que detenemos en las pruebas** |
-| DN3 | `datanode3` | hadoopnode3 | Guarda bloques |
-| Cliente | `clientnode` | clientnode | Desde aquí se cargan los datasets y se ejecutan los scripts |
-| Proxy web | `front` | front | Publica las interfaces web en `localhost` (9870, 8088, 8080…) |
+        subgraph History["Historial"]
+            JHS["jobhistoryserver<br/>UI: 19888"]
+            SHS["sparkhistoryserver<br/>UI: 18080"]
+        end
 
-**Configuración de HDFS utilizada** (`config/hdfs-site.xml`):
+        JMX["5 JMX Exporters<br/>Monitoreo de servicios"]
+        Front["front - Apache HTTPD<br/>UI: 8080<br/>Proxy web"]
+    end
 
-| Propiedad | Valor | Efecto |
-|---|---|---|
-| `dfs.replication` | 2 | Cada bloque se guarda en 2 DataNodes distintos |
-| `dfs.namenode.heartbeat.recheck-interval` | 30 000 ms | Un DataNode se declara muerto a los 2 × 30 s + 10 × 3 s = **90 s** sin latidos. Con el valor por defecto (5 min) serían 10 min 30 s; lo bajamos para que las pruebas fueran prácticas |
-| Tamaño de bloque | 128 MB (por defecto) | 1 GB → 8 bloques; 10 GB → 80 bloques |
+    Client -->|Comandos HDFS| NN
+    Client -->|Trabajos YARN/Spark| RM
 
-## 4. Instalación
+    NN <-->|Heartbeats y reportes| DN1
+    NN <-->|Heartbeats y reportes| DN2
+    NN <-->|Heartbeats y reportes| DN3
 
-Requisitos: Docker Desktop (Compose 2.x) y unos **25 GB libres** (11 GB de datos × 2 réplicas).
+    RM -->|Coordina recursos| NM
+
+    NN --> JHS
+    RM --> JHS
+    NN --> SHS
+    RM --> SHS
+
+    NN -.-> JMX
+    DN1 -.-> JMX
+    RM -.-> JMX
+    NM -.-> JMX
+    JHS -.-> JMX
+
+    Front --> NN
+    Front --> DN1
+    Front --> RM
+    Front --> NM
+    Front --> JHS
+    Front --> SHS
+```
+
+### Diagrama de la prueba de fallo de 1 GB
+
+```mermaid
+flowchart TB
+    A["Dataset 1 GB<br/>8 bloques - Replicación 2"]
+
+    B["Estado inicial<br/>3 DataNodes activos<br/>16 réplicas"]
+
+    C["Falla de DN2<br/>4 bloques afectados"]
+
+    D["Estado durante la falla<br/>2 DataNodes activos<br/>3 bloques subreplicados observados"]
+
+    E["HDFS recupera automáticamente<br/>4 réplicas"]
+
+    F["Estado recuperado<br/>8 bloques disponibles<br/>16 réplicas<br/>0 bloques subreplicados<br/>HEALTHY"]
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+
+    classDef falla fill:#FCE8E6,stroke:#C5221F,color:#9B1C1C
+    classDef correcto fill:#E7F4E4,stroke:#398648,color:#20552B
+
+    class C,D falla
+    class B,F correcto
+```
+
+### Diagrama de la prueba de fallo de 10 GB
+
+```mermaid
+flowchart TB
+    A["Dataset 10 GB<br/>75 bloques - Replicación 2"]
+
+    B["Estado inicial<br/>3 DataNodes activos<br/>150 réplicas"]
+
+    C["Falla de DN3<br/>57 bloques afectados"]
+
+    D["Estado durante la falla<br/>2 DataNodes activos<br/>45 bloques subreplicados observados"]
+
+    E["HDFS recupera automáticamente<br/>57 réplicas"]
+
+    F["Estado recuperado<br/>75 bloques disponibles<br/>150 réplicas<br/>0 bloques subreplicados<br/>HEALTHY"]
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+
+    classDef falla fill:#FCE8E6,stroke:#C5221F,color:#9B1C1C
+    classDef correcto fill:#E7F4E4,stroke:#398648,color:#20552B
+
+    class C,D falla
+    class B,F correcto
+```
+
+## 2. Instalación y preparación
+
+Se requiere Git y Docker con Docker Compose y soporte para contenedores Linux. Desde la terminal del host:
 
 ```powershell
-# 1. Clonar el repositorio base (con saltos de línea Linux)
-git clone --config core.autocrlf=false https://github.com/hadoop-sandbox/hadoop-sandbox.git
-cd hadoop-sandbox
-
-# 2. Agregar nuestra configuración
-Copy-Item conf\hadoop\hdfs-site.xml conf\hadoop\hdfs-site.xml.bak
-Copy-Item <este-repo>\config\docker-compose.override.yml .
-Copy-Item <este-repo>\config\hdfs-site.xml conf\hadoop\hdfs-site.xml -Force
-
-# 3. Levantar el clúster (15 contenedores)
+git clone https://github.com/juliosalazar98/bigdata-Grupo01.git
+cd bigdata-Grupo01
 docker compose up -d
-docker compose ps
-
-# 4. Verificar: 3 DataNodes vivos y replicación 2
-docker compose exec -u hdfs clientnode hdfs dfsadmin -report
-docker compose exec -u hdfs clientnode hdfs getconf -confKey dfs.replication
 ```
 
-## 5. Ejecución
+Con el clúster iniciado, verificar los DataNodes y preparar el directorio del grupo:
 
 ```powershell
-# Copiar los scripts al nodo cliente
-docker compose cp <este-repo>\scripts clientnode:/tmp/lg15
-docker compose exec clientnode bash -c "sed -i 's/\r$//' /tmp/lg15/*.sh"
-
-# Estructura del grupo en HDFS y datasets
-docker compose exec -u hdfs    clientnode bash /tmp/lg15/preparar_hdfs.sh
-docker compose exec -u sandbox clientnode bash /tmp/lg15/generar_datasets.sh 1GB
-docker compose exec -u sandbox clientnode bash /tmp/lg15/generar_datasets.sh 10GB
+docker compose exec -u hdfs namenode hdfs dfsadmin -report
+docker compose exec -u hdfs namenode hdfs dfs -mkdir -p /grupo01
+docker compose exec -u hdfs namenode hdfs dfs -chown sandbox:sandbox /grupo01
 ```
 
-**Prueba de fallo** (se repite con `1GB` y con `10GB`):
+Ingresar al nodo cliente:
 
 ```powershell
-# a) Estado inicial
-docker compose exec -u hdfs clientnode bash /tmp/lg15/lg15.sh estado 1GB antes
+docker compose exec -u sandbox clientnode bash
+```
 
-# b) Falla de DN2 + monitoreo (al terminar muestra el estado DESPUÉS y la comparación)
-docker compose stop datanode2; docker compose exec -u hdfs clientnode bash /tmp/lg15/lg15.sh monitor 1GB
+Dentro de esa sesión Bash, comprobar que el factor de replicación devuelve `2` y definir las rutas:
 
-# c) Restaurar DN2 y registrar el estado final (esperar 2-3 min)
+```bash
+hdfs getconf -confKey dfs.replication
+BASE=/grupo01
+F1="$BASE/dataset_1GB/dataset_grupo01_1GB"
+F10="$BASE/dataset_10GB/dataset_grupo01_10GB"
+hdfs dfs -mkdir -p "$BASE/dataset_1GB" "$BASE/dataset_10GB"
+hdfs dfs -ls "$BASE"
+```
+
+> [!IMPORTANT]
+> Ejecutar los comandos `docker compose` desde el host, en la raíz del repositorio, conservando la carpeta `conf/`. Los comandos `hdfs` y `head` de las pruebas se ejecutan dentro del nodo cliente. Mantener esa sesión para conservar las variables `BASE`, `F1` y `F10`; usar otra terminal del host para detener y reiniciar los DataNodes.
+
+La interfaz del NameNode está disponible en [localhost:9870](http://localhost:9870) y los archivos pueden consultarse en el [explorador HDFS](http://localhost:9870/explorer.html#/grupo01).
+
+## 3. Pruebas de fallo
+
+### 3.1. Dataset de 1 GB
+
+**Carga y estado inicial — nodo cliente:**
+
+```bash
+head -c 1000000000 /dev/zero | hdfs dfs -put - "$F1"
+hdfs dfs -ls -h "$F1"
+hdfs dfs -stat 'Tamaño: %b bytes | Replicacion: %r' "$F1"
+hdfs fsck "$F1" -files -blocks -locations
+```
+
+El archivo presentó **8 bloques con dos réplicas**, tres DataNodes activos y estado `HEALTHY`.
+
+**Simulación de fallo — host:**
+
+```powershell
+docker compose stop datanode2
+```
+
+**Disponibilidad, lectura y bloques — nodo cliente:**
+
+```bash
+hdfs dfs -test -e "$F1" && echo "Archivo disponible"
+hdfs dfs -cat "$F1" > /dev/null && echo "Lectura correcta"
+hdfs fsck "$F1" -files -blocks -locations
+```
+
+DN2 almacenaba cuatro bloques del archivo. Durante la comprobación se observaron **3 bloques subreplicados (37,5 %)**: uno de los cuatro afectados ya había recuperado su segunda réplica. Los ocho bloques continuaron disponibles y la lectura fue correcta.
+
+**Recuperación — nodo cliente:** repetir la comprobación antes de reiniciar DN2.
+
+```bash
+hdfs fsck "$F1" -files -blocks -locations
+```
+
+El registro posterior mostró dos réplicas por bloque y cero bloques subreplicados, utilizando DN1 y DN3. Finalmente, desde el host:
+
+```powershell
 docker compose start datanode2
-docker compose exec -u hdfs clientnode bash /tmp/lg15/lg15.sh estado 1GB restaurado
-
-# d) Guardar los resultados en HDFS (/grupo01/resultados) y copiarlos a la PC
-docker compose exec -u hdfs clientnode bash /tmp/lg15/lg15.sh guardar
-docker compose cp clientnode:/tmp/lg15_out resultados
 ```
 
-| Comando de `lg15.sh` | Qué registra |
-|---|---|
-| `estado <ds> <momento>` | Estado de los DataNodes, estado del archivo (`fsck`), réplicas por DataNode, ubicación de cada bloque, checksum y prueba de lectura completa |
-| `monitor <ds>` | Cada 1 s: nodos vivos/stale/muertos, bloques que el NameNode ubica en DN2, bloques sub-replicados y copias pendientes. Mide los tiempos de cada fase |
-| `comparar <ds>` | Para cada bloque: réplicas antes, réplicas después, réplica perdida y **DataNode donde se creó la nueva** |
-| `guardar` | Copia todos los resultados a `/grupo01/resultados` en HDFS |
+### 3.2. Dataset de 10 GB
 
-## 6. Resultados
+Con los tres DataNodes nuevamente activos, realizar la segunda prueba.
 
-### 6.1 Evolución de la falla
+**Carga y estado inicial — nodo cliente:**
 
-![Recuperación de réplicas](diagrama/recuperacion_replicas.png)
+```bash
+head -c 10000000000 /dev/zero | hdfs dfs -put - "$F10"
+hdfs dfs -ls -h "$F10"
+hdfs dfs -stat 'Tamaño: %b bytes | Replicacion: %r' "$F10"
+hdfs fsck "$F10" -files -blocks -locations
+```
 
-| Fase (segundos desde que se detuvo DN2) | Dataset 1 GB | Dataset 10 GB |
-|---|---|---|
-| DN2 pasa a **STALE** (sin latidos > 30 s) | 50 s | 46 s |
-| El NameNode marca a DN2 como **MUERTO** | 85 s | 85 s |
-| El NameNode **elimina las réplicas de DN2** de su mapa → bloques sub-replicados | 110 s | 106 s |
-| **Re-replicación completa** (todos los bloques otra vez con 2 réplicas) | 118 s | 288 s |
-| Duración de la re-replicación | **8 s** | **182 s** |
+El archivo presentó **75 bloques con dos réplicas** y estado `HEALTHY`.
 
-### 6.2 Prueba 1 – Dataset 1 GB (8 bloques)
+**Simulación de fallo — host:**
 
-**Antes** (`resultados/1GB/antes/`): 8 bloques, 2 réplicas cada uno, estado HEALTHY.
+```powershell
+docker compose stop datanode3
+```
 
-| DataNode | Réplicas | Bloques |
-|---|---|---|
-| DN1 | 3 | 2, 5, 7 |
-| **DN2** | **6** | **0, 1, 3, 4, 6, 7** |
-| DN3 | 7 | 0, 1, 2, 3, 4, 5, 6 |
+**Disponibilidad, lectura y bloques — nodo cliente:**
 
-**Durante** (`resultados/1GB/durante/`, `resultados/1GB/monitor/`):
-- DN2 detenido. Los bloques 0, 1, 3, 4, 6 y 7 quedaron con **1 réplica viva** (0, 1, 3, 4 y 6 en DN3; 7 en DN1).
-- `fsck`: *Under-replicated blocks: 6 (75 %)*. Para cada bloque: *"Target Replicas is 2 but found 1 live replica(s)"*.
-- El archivo **se leyó completo** (1 073 741 824 bytes) con DN2 caído. El cliente registró `Failed to connect to /172.22.0.4:9866 ... Add to deadNodes and continue with other datanodes` y enseguida `Successfully connected to /172.22.0.5:9866`: pasó a la otra réplica.
+```bash
+hdfs dfs -test -e "$F10" && echo "Archivo disponible"
+hdfs dfs -cat "$F10" > /dev/null && echo "Lectura correcta"
+hdfs fsck "$F10" -files -blocks -locations
+```
 
-**Después** (`resultados/1GB/despues/`, `resultados/1GB/comparacion.txt`): estado HEALTHY, replicación promedio 2.0, 0 sub-replicados. Se crearon **6 réplicas nuevas: 5 en DN1 y 1 en DN3**. Checksum idéntico al inicial: `…73f8910e99b1d86bd029de245ccbb489`.
+DN3 almacenaba 57 bloques del archivo. Durante la comprobación se observaron **45 bloques subreplicados (60 %)**; los otros 12 afectados ya habían recuperado su segunda réplica. Los 75 bloques permanecieron disponibles y la lectura fue correcta.
 
-**Restaurado** (`resultados/1GB/restaurado/`): DN2 volvió con sus 6 réplicas antiguas. Esos bloques quedaron con 3 copias y el NameNode **borró las sobrantes**: todo volvió a replicación 2 con 0 sobre-replicados.
+**Recuperación — nodo cliente:** repetir la comprobación antes de reiniciar DN3.
 
-### 6.3 Prueba 2 – Dataset 10 GB (80 bloques)
+```bash
+hdfs fsck "$F10" -files -blocks -locations
+```
 
-**Antes** (`resultados/10GB/antes/`): 80 bloques, 2 réplicas cada uno, HEALTHY. DN1 tenía 53 réplicas, **DN2 49** y DN3 58.
+El registro posterior mostró dos réplicas por bloque y cero bloques subreplicados, utilizando DN1 y DN2. Finalmente, desde el host:
 
-**Durante**: DN2 detenido. **49 bloques** quedaron con 1 réplica viva (*Under-replicated blocks: 49 (61.25 %)*). El archivo de 10 GB **se leyó completo** con DN2 caído, con el mismo cambio automático de réplica. La re-replicación fue **gradual**: los sub-replicados bajaron de 49 a 0 en 182 s, con un máximo de 12 copias en curso al mismo tiempo.
+```powershell
+docker compose start datanode3
+```
 
-**Después**: HEALTHY, replicación 2.0, 0 sub-replicados. Se crearon **49 réplicas nuevas: 27 en DN1 y 22 en DN3**. Checksum idéntico al inicial: `…f034903a8b6737ee965eda118a89658a`.
+### 3.3. Verificación final
 
-**Restaurado**: DN2 volvió con sus 49 réplicas antiguas y el NameNode eliminó las sobrantes (DN1 quedó con 31, DN2 con 49 y DN3 con 80; 160 réplicas = 80 bloques × 2).
+Desde el nodo cliente, consultar los directorios, el espacio utilizado y la integridad de ambos archivos:
 
-### 6.4 Tiempo de lectura completa del archivo
+```bash
+hdfs dfs -ls -R "$BASE"
+hdfs dfs -du -h "$BASE"
+hdfs fsck "$BASE"
+```
 
-| Momento | 1 GB | 10 GB |
-|---|---|---|
-| Antes de la falla | 5 s | 93 s |
-| **Con DN2 caído** | **44 s** | **105 s** |
-| Después de la recuperación | 6 s | 82 s |
+La verificación final de `/grupo01` mostró **dos archivos, 83 bloques, tres DataNodes y estado `HEALTHY`**, sin bloques perdidos, corruptos ni subreplicados.
 
-Durante la falla el archivo siguió disponible, pero la lectura fue más lenta. El cliente intentó conectarse primero a DN2 y esperó hasta recibir `No route to host`; recién entonces lo marcó como nodo muerto y siguió con la otra réplica.
-
-## 7. Análisis
-
-### 7.1 ¿Por qué ocurrió así? El mecanismo de replicación de HDFS
-
-1. **Latidos (heartbeats).** Cada DataNode avisa al NameNode cada 3 s que está vivo y le envía periódicamente un reporte de los bloques que guarda.
-2. **STALE.** Si pasan más de 30 s sin latidos, el NameNode considera al nodo *stale* (sospechoso). Todavía no hace nada con sus bloques.
-3. **MUERTO.** A los 90 s sin latidos (2 × `recheck-interval` + 10 × latido) el nodo se cuenta como muerto. En las pruebas apareció a los 85 s porque el reloj del monitor empezó cuando el contenedor ya había terminado de detenerse.
-4. **Eliminación de sus réplicas.** En la siguiente revisión periódica (cada 30 s) el NameNode quita al nodo de su mapa de bloques. Recién ahí los bloques que tenían una réplica en DN2 pasan a estar **sub-replicados** (106–110 s).
-5. **Re-replicación.** El NameNode elige, para cada bloque sub-replicado, un DataNode **origen** que tiene la réplica sobreviviente y un DataNode **destino** que no la tiene, y le ordena copiarla. Limita cuántas copias asigna a la vez a cada DataNode para no saturar la red ni los discos. Por eso con 10 GB la recuperación fue gradual.
-6. **Destino forzado.** Con 3 DataNodes y uno caído, cada bloque tiene su copia sobreviviente en uno de los 2 nodos vivos, así que la nueva réplica **solo puede ir al otro**. En el dataset de 1 GB, 5 de los 6 bloques afectados tenían su copia en DN3, por eso 5 réplicas nuevas fueron a DN1.
-7. **Retorno del nodo.** Cuando DN2 vuelve, reporta sus réplicas antiguas (sus datos seguían en su volumen). Esos bloques quedan con 3 copias (*sobre-replicados*) y el NameNode borra una para volver al factor configurado.
-
-### 7.2 Respuestas – Dataset 1 GB
-
-| | Pregunta | Respuesta |
-|---|---|---|
-| **Antes** | ¿Cuántos bloques tenía el archivo? | 8 bloques de 128 MB |
-| | ¿Cuántas réplicas tenía cada bloque? | 2 |
-| | ¿En qué DataNodes estaban? | DN1: 2, 5, 7 · DN2: 0, 1, 3, 4, 6, 7 · DN3: 0–6 |
-| **Durante** | ¿Qué DataNode fue detenido? | DN2 (hadoopnode2, 172.22.0.4) |
-| | ¿Qué bloques estaban almacenados en él? | 0, 1, 3, 4, 6 y 7 (6 de 8) |
-| | ¿Existían otras réplicas? | Sí: 0, 1, 3, 4 y 6 en DN3; 7 en DN1 |
-| | ¿El archivo continuó disponible? | Sí, se leyó completo (1 GB) en 44 s |
-| | ¿Qué cambió en HDFS? | DN2 pasó a STALE (50 s) y a MUERTO (85 s); 6 bloques quedaron sub-replicados (110 s) |
-| **Después** | ¿Qué estado reporta HDFS? | HEALTHY, replicación promedio 2.0 |
-| | ¿Existen bloques sub-replicados? | Hubo 6 durante 8 s; al final, 0 |
-| | ¿HDFS recuperó automáticamente las réplicas? | Sí, sin intervención, en 8 s |
-| | ¿En qué DataNode se generaron las nuevas réplicas? | 5 en DN1 (bloques 0, 1, 3, 4, 6) y 1 en DN3 (bloque 7) |
-
-### 7.3 Respuestas – Dataset 10 GB
-
-| | Pregunta | Respuesta |
-|---|---|---|
-| **Antes** | ¿Cuántos bloques tenía el archivo? | 80 bloques de 128 MB |
-| | ¿Cuántas réplicas tenía cada bloque? | 2 |
-| | ¿En qué DataNodes estaban? | DN1: 53 réplicas · DN2: 49 · DN3: 58 (lista en `resultados/10GB/antes/bloques.txt`) |
-| **Durante** | ¿Qué DataNode fue detenido? | DN2 (hadoopnode2, 172.22.0.4) |
-| | ¿Qué bloques estaban almacenados en él? | 49 de 80 (lista en `resultados/10GB/comparacion.txt`) |
-| | ¿Existían otras réplicas? | Sí, cada uno tenía su otra réplica en DN1 o en DN3 |
-| | ¿El archivo continuó disponible? | Sí, se leyó completo (10 GB) en 105 s |
-| | ¿Qué cambió en HDFS? | DN2 pasó a STALE (46 s) y a MUERTO (85 s); 49 bloques quedaron sub-replicados (106 s) |
-| **Después** | ¿Qué estado reporta HDFS? | HEALTHY, replicación promedio 2.0 |
-| | ¿Existen bloques sub-replicados? | Hubo 49, que bajaron gradualmente a 0 en 182 s |
-| | ¿HDFS recuperó automáticamente las réplicas? | Sí, sin intervención |
-| | ¿En qué DataNode se generaron las nuevas réplicas? | 27 en DN1 y 22 en DN3 |
-
-## 8. Comparación entre ambos experimentos
+## 4. Comparación y análisis
 
 | Característica | Dataset 1 GB | Dataset 10 GB |
-|---|---|---|
-| Tamaño | 1 GB (1 073 741 824 B) | 10 GB (10 737 418 240 B) |
-| Número de bloques | 8 | 80 |
+| --- | --- | --- |
+| Tamaño | 1.000.000.000 bytes | 10.000.000.000 bytes |
+| Número de bloques | 8 | 75 |
+| Tamaño de bloque | 128 MiB | 128 MiB |
 | Factor de replicación | 2 | 2 |
-| DataNode afectado | DN2 (hadoopnode2) | DN2 (hadoopnode2) |
-| Bloques afectados | 6 de 8 (75 %) | 49 de 80 (61 %) |
-| Bloques disponibles después de la falla | 8 de 8 (los 6 afectados con 1 réplica) | 80 de 80 (los 49 afectados con 1 réplica) |
-| ¿Archivo accesible? | Sí (lectura completa en 44 s con DN2 caído) | Sí (lectura completa en 105 s con DN2 caído) |
-| ¿Existieron bloques sub-replicados? | Sí, 6 | Sí, 49 |
-| Tiempo de recuperación | 118 s (110 s de detección + 8 s de re-replicación) | 288 s (106 s de detección + 182 s de re-replicación) |
-| Nuevas réplicas | 6: 5 en DN1, 1 en DN3 | 49: 27 en DN1, 22 en DN3 |
+| Distribución inicial de réplicas | DN1: 7 · DN2: 4 · DN3: 5 | DN1: 42 · DN2: 51 · DN3: 57 |
+| DataNode detenido | DN2 (`172.18.0.4`) | DN3 (`172.18.0.6`) |
+| Bloques inicialmente afectados | 4 | 57 |
+| Bloques subreplicados observados | 3 (37,5 %) | 45 (60 %) |
+| Bloques disponibles durante la falla | 8 de 8 | 75 de 75 |
+| Archivo accesible y lectura correcta | Sí | Sí |
+| Bloques perdidos o corruptos | 0 | 0 |
+| Nuevas réplicas | 4, en DN1 y DN3 | 57, en DN1 y DN2 |
+| Subreplicados tras la recuperación | 0 | 0 |
+| Tiempo de recuperación | 121,87 s (2 min 1,87 s), incluida la detección del fallo | 140,28 s (2 min 20,28 s), incluida la detección del fallo |
+| Estado final | `HEALTHY` | `HEALTHY` |
 
-**Conclusión de la comparación:** el tiempo de **detección** fue prácticamente el mismo en ambos casos (~110 s), porque depende de la configuración de latidos y no del tamaño de los datos. El tiempo de **re-replicación** sí creció con el tamaño (8 s contra 182 s), porque hay que copiar más bloques y HDFS limita las copias simultáneas.
+**Antes de la falla**, cada bloque tenía dos copias en nodos diferentes. **Durante la falla**, las réplicas restantes permitieron leer los archivos completos. **Después**, el NameNode coordinó la creación de nuevas copias en los nodos disponibles, recuperando el factor de replicación incluso mientras el nodo detenido seguía fuera de servicio.
 
-## 9. Preguntas de la exposición
+El dataset de 10 GB permitió observar una distribución más amplia y la recuperación de más réplicas. Las cifras de subreplicación corresponden al momento de cada consulta, cuando parte de la recuperación ya había ocurrido.
 
-**1. ¿Por qué HDFS puede continuar proporcionando el archivo aunque un DataNode haya fallado?**
-Porque cada bloque tiene una segunda réplica en otro DataNode. El NameNode le entrega al cliente todas las ubicaciones de cada bloque; si una falla, el cliente pasa a la siguiente. Lo vimos en el registro del cliente: `Failed to connect to /172.22.0.4:9866 … Add to deadNodes and continue with other datanodes` y luego `Successfully connected to /172.22.0.5:9866`.
+> [!NOTE]
+> Disponibilidad y replicación completa son condiciones distintas: los archivos conservaron el estado `HEALTHY` durante la falla, aunque algunos bloques tenían una sola réplica activa. Los tiempos de ejecución de `fsck` no representan el tiempo de recuperación del clúster.
 
-**2. ¿Qué habría ocurrido si el factor de replicación hubiera sido 1?**
-Cada bloque existiría en un solo DataNode. Al caer DN2, sus bloques (6 de 8 en el dataset de 1 GB, 49 de 80 en el de 10 GB) no tendrían otra copia: `fsck` los reportaría como *missing*, el estado sería CORRUPT y el archivo no se podría leer completo. HDFS tampoco podría re-replicarlos, porque no hay copia origen. Solo se recuperarían si DN2 volviera con su disco intacto; si el disco se perdiera, los datos se perderían para siempre.
+### Registros de resultados
 
-**3. ¿Qué habría ocurrido si hubieran fallado dos DataNodes simultáneamente?**
-Con replicación 2, se perderían los bloques que tenían **sus dos réplicas justo en esos dos nodos**. Con la distribución que medimos antes de la falla:
+Los `.txt` permiten revisar los identificadores de bloques, sus ubicaciones y las réplicas activas; los archivos de lectura registran la confirmación obtenida durante la falla.
 
-| Nodos caídos | Bloques perdidos (1 GB) | Bloques perdidos (10 GB) |
-|---|---|---|
-| DN2 + DN3 | 5 de 8 | 27 de 80 |
-| DN1 + DN2 | 1 de 8 | 22 de 80 |
-| DN1 + DN3 | 2 de 8 | 31 de 80 |
+| Dataset | Estado inicial | Durante la falla | Lectura | Recuperación |
+| --- | --- | --- | --- | --- |
+| 1 GB | [Antes](resultados/1GB_antes.txt) | [Durante](resultados/1GB_durante_falla.txt) | [Lectura](resultados/1GB_lectura.txt) | [Recuperación](resultados/1GB_recuperacion.txt) |
+| 10 GB | [Antes](resultados/10GB_antes.txt) | [Durante](resultados/10GB_durante_falla.txt) | [Lectura](resultados/10GB_lectura.txt) | [Recuperación](resultados/10GB_recuperacion.txt) |
 
-El archivo no se podría leer completo, y los bloques sobrevivientes quedarían sub-replicados sin poder recuperarse, porque solo quedaría 1 nodo vivo. Si las fallas ocurren **una después de otra**, con tiempo suficiente para que termine la re-replicación (118 s o 288 s en nuestras pruebas), no se pierde nada.
+## 5. Evidencias
 
-**4. ¿Por qué un factor de replicación de 2 no significa necesariamente que existan dos copias completas del archivo en dos DataNodes?**
-Porque HDFS replica **bloques**, no archivos. Cada bloque elige sus 2 DataNodes por separado, así que las réplicas quedan repartidas entre los 3 nodos y ninguno tiene necesariamente el archivo entero. En el dataset de 10 GB, antes de la falla, DN1 tenía 53 de los 80 bloques, DN2 49 y DN3 58: ninguno tenía una copia completa.
+### Entorno y configuración
 
-**5. ¿Cuál es la relación entre tamaño de bloque y número de bloques?**
-Número de bloques = tamaño del archivo ÷ tamaño de bloque, redondeado hacia arriba. Con bloques de 128 MB: 1 GB → 8 bloques y 10 GB → 80 bloques. Bloques más grandes significan menos bloques y menos metadatos en el NameNode, pero menos paralelismo. Bloques más pequeños dan más paralelismo, pero recargan la memoria del NameNode.
+**01. Contenedores activos.** Docker Compose muestra el NameNode y los tres DataNodes en ejecución, junto con los servicios complementarios.
 
-**6. ¿Por qué el dataset de 10 GB permite observar un comportamiento más representativo de un sistema distribuido?**
-Con 8 bloques la muestra es muy pequeña: la recuperación terminó en 8 s y las réplicas nuevas quedaron desbalanceadas (5 en DN1 y 1 en DN3). Con 80 bloques se ve un reparto parejo entre los 3 nodos (53/49/58), re-replicación hacia los dos nodos vivos (27/22) y el **control de carga** de HDFS: la recuperación avanzó de forma gradual durante 182 s, con un máximo de 12 copias simultáneas, en vez de copiarlo todo de golpe.
+![Contenedores del clúster activos](evidencias/01_contenedores_activos.png)
 
-**7. ¿Qué sucede con los bloques que tenían una réplica en el DataNode que falló?**
-Al principio nada: el NameNode tarda en notar la caída (STALE a los ~46–50 s, MUERTO a los 85 s). Cuando quita al nodo de su mapa (106–110 s), esos bloques quedan con 1 réplica viva y entran en la cola de **sub-replicados** (*"Target Replicas is 2 but found 1 live replica"*). El NameNode ordena copiarlos desde el nodo que conserva la réplica hacia el otro nodo vivo, hasta volver a 2. Si DN2 regresa, sus réplicas antiguas quedan como **sobrantes** y se eliminan.
+**02. Factor de replicación.** El archivo `hdfs-site.xml` establece `dfs.replication` en `2`.
 
-**8. ¿Quién administra la ubicación y replicación de los bloques: el cliente, el DataNode o el NameNode?**
-El **NameNode**. Mantiene el mapa de bloques, decide dónde se guarda cada réplica, detecta los nodos caídos, ordena la re-replicación y elimina las réplicas sobrantes. Los **DataNodes** solo almacenan los bloques, envían latidos y reportes y ejecutan las copias que se les ordenan. El **cliente** pregunta al NameNode dónde están los bloques y lee o escribe directamente en los DataNodes; puede cambiar de réplica si una falla, pero no decide la replicación.
+![Configuración del factor de replicación en 2](evidencias/02_factor_replicacion.png)
 
-**9. ¿Qué diferencia existe entre disponibilidad del archivo y cumplimiento del factor de replicación después de una falla?**
-**Disponibilidad** es poder leer el archivo: basta con que cada bloque tenga al menos 1 réplica viva, y se cumplió durante toda la prueba. **Cumplimiento del factor de replicación** es que cada bloque tenga las 2 réplicas configuradas, y **no** se cumplió entre los segundos 106–110 y 118–288. En esa ventana el archivo estaba disponible pero **en riesgo**: una segunda falla habría perdido bloques. Por eso `fsck` mostraba **HEALTHY** (no faltaba ningún bloque) y al mismo tiempo 6 o 49 bloques sub-replicados.
+**03. Estado general de HDFS.** La interfaz del NameNode muestra tres nodos activos, ninguno muerto y cero bloques subreplicados en la consulta capturada.
 
-## 10. Estructura del repositorio
+![Estado general del clúster HDFS](evidencias/03_estado_inicial_hdfs.png)
 
-```
-sandbox-01/
-├── README.md
-├── config/
-│   ├── docker-compose.override.yml   # agrega DN2 y DN3
-│   └── hdfs-site.xml                 # replicación 2 y detección en ~90 s
-├── scripts/
-│   ├── preparar_hdfs.sh              # crea /grupo01/...
-│   ├── generar_datasets.sh           # datasets de 1 GB y 10 GB
-│   ├── lg15.sh                       # estado, monitoreo, comparación y guardado
-│   └── graficar_recuperacion.py      # genera diagrama/recuperacion_replicas.png
-├── diagrama/
-│   ├── arquitectura.png / .dot
-│   └── recuperacion_replicas.png
-├── resultados/                       # salidas completas de cada prueba
-│   ├── 1GB/  {antes, durante, despues, restaurado, monitor, comparacion.txt}
-│   └── 10GB/ {antes, durante, despues, restaurado, monitor, comparacion.txt}
-└── evidencias/                       # capturas de pantalla
-```
+**04. Tres DataNodes activos.** Se identifican `hadoopnode`, `datanode2` y `datanode3`, con sus direcciones y almacenamiento utilizado.
 
-## 11. Notas
+![Listado de los tres DataNodes](evidencias/04_tres_datanodes_activos.png)
 
-- Los datasets se generaron con un script para controlar el tamaño exacto e identificar al grupo en cada registro (`grupo01,0000000001,LG15,…`). HDFS divide y replica cualquier archivo de la misma forma, sin importar su contenido.
-- Los tres DataNodes corren en la misma PC y comparten su disco físico. En un clúster real cada DataNode estaría en otra máquina, y la re-replicación dependería también de la red.
-- Las horas de las salidas están en hora de Bolivia (UTC−4). Los registros internos de Hadoop usan UTC.
-- El repositorio base hadoop-sandbox no se incluye aquí; se clona desde su repositorio original (ver Instalación).
+**05. Directorios del Grupo 01.** El explorador HDFS muestra `dataset_1GB` y `dataset_10GB` dentro de `/grupo01`.
 
----
+![Directorios HDFS del Grupo 01](evidencias/05_directorios_grupo01.png)
 
-Práctica LG15 · Tecnologías Emergentes I · GRUPO 01 · Universidad del Valle · Cochabamba, 2026
+### Experimento con 1 GB
+
+**06. Archivo cargado.** `dataset_grupo01_1GB` aparece en HDFS con replicación 2 y bloques de 128 MiB.
+
+![Dataset de 1 GB almacenado en HDFS](evidencias/06_1GB_archivo_cargado.png)
+
+**07. Bloques antes del fallo.** El registro inicial muestra ocho bloques, promedio de dos réplicas y cero subreplicados.
+
+![Estado inicial de los bloques de 1 GB](evidencias/07_1GB_bloques_antes.png)
+
+**08. DataNode 2 detenido.** Docker muestra `datanode2` en estado `Exited`, mientras los demás servicios permanecen iniciados.
+
+![DataNode 2 detenido en Docker](evidencias/08_1GB_datanode2_detenido.png)
+
+**09. Fallo reconocido por HDFS.** La interfaz identifica DN2 como inactivo y mantiene dos DataNodes en operación.
+
+![DataNode 2 inactivo en HDFS](evidencias/09_1GB_nodo_inactivo.png)
+
+**10. Subreplicación durante el fallo.** Se registran tres bloques subreplicados (37,5 %), sin bloques perdidos ni corruptos.
+
+![Bloques del dataset de 1 GB durante la falla](evidencias/10_1GB_bloques_durante_falla.png)
+
+**11. Lectura correcta.** Los comandos confirman la existencia del archivo y su lectura completa durante la falla.
+
+![Disponibilidad y lectura del dataset de 1 GB](evidencias/11_1GB_lectura_correcta.png)
+
+**12. Réplicas recuperadas.** Con solo dos DataNodes activos, el promedio vuelve a dos réplicas y la subreplicación baja a cero.
+
+![Recuperación de réplicas del dataset de 1 GB](evidencias/12_1GB_recuperacion.png)
+
+### Experimento con 10 GB
+
+**13. Archivo cargado.** `dataset_grupo01_10GB` aparece en HDFS con replicación 2 y bloques de 128 MiB.
+
+![Dataset de 10 GB almacenado en HDFS](evidencias/13_10GB_archivo_cargado.png)
+
+**14. Bloques antes del fallo.** El registro inicial muestra 75 bloques, tres DataNodes y dos réplicas por bloque.
+
+![Estado inicial de los bloques de 10 GB](evidencias/14_10GB_bloques_antes.png)
+
+**15. DataNode 3 detenido.** Docker muestra `datanode3` en estado `Exited` para la segunda prueba.
+
+![DataNode 3 detenido en Docker](evidencias/15_10GB_datanode3_detenido.png)
+
+**16. Fallo reconocido por HDFS.** DN3 figura como inactivo; DN1 y DN2 continúan en operación.
+
+![DataNode 3 inactivo en HDFS](evidencias/16_10GB_nodo_inactivo.png)
+
+**17. Subreplicación durante el fallo.** Se observan 45 bloques subreplicados (60 %), sin bloques perdidos ni corruptos.
+
+![Bloques del dataset de 10 GB durante la falla](evidencias/17_10GB_bloques_durante_falla.png)
+
+**18. Lectura correcta.** El archivo continúa disponible y se lee completamente durante la caída de DN3.
+
+![Disponibilidad y lectura del dataset de 10 GB](evidencias/18_10GB_lectura_correcta.png)
+
+**19. Réplicas recuperadas.** HDFS vuelve a registrar dos réplicas por bloque y cero subreplicados con dos DataNodes activos.
+
+![Recuperación de réplicas del dataset de 10 GB](evidencias/19_10GB_recuperacion.png)
+
+### Verificación final
+
+**20. Integridad de ambos datasets.** La revisión de `/grupo01` confirma 83 bloques, tres DataNodes y estado `HEALTHY`, sin bloques subreplicados, perdidos ni corruptos.
+
+![Verificación final de HDFS para el Grupo 01](evidencias/20_verificacion_final_hdfs.png)
+
+## 6. Preguntas
+
+**1. ¿Por qué HDFS mantiene disponible el archivo cuando falla un DataNode?**
+
+Porque cada bloque tiene réplicas almacenadas en otros DataNodes, permitiendo recuperar la información desde las copias disponibles.
+
+**2. ¿Qué ocurriría con un factor de replicación de 1?**
+
+Los bloques almacenados únicamente en el DataNode que falló dejarían de estar disponibles hasta recuperar ese nodo.
+
+**3. ¿Qué sucedería si fallaran dos DataNodes simultáneamente?**
+
+Podrían quedar bloques sin ninguna réplica disponible, provocando que algunos archivos no pudieran leerse completamente.
+
+**4. ¿Por qué replicación 2 no significa dos archivos completos en dos DataNodes?**
+
+Porque HDFS replica individualmente los bloques, que pueden distribuirse entre distintos DataNodes.
+
+**5. ¿Qué relación existe entre tamaño de bloque y número de bloques?**
+
+Para un archivo de tamaño fijo, cuanto menor sea el tamaño de bloque, mayor será la cantidad de bloques necesarios. Por el contrario, un tamaño de bloque mayor genera menos bloques.
+
+**6. ¿Por qué 10 GB representa mejor un sistema distribuido?**
+
+Porque el dataset de 10 GB contiene 75 bloques, mientras que el de 1 GB contiene únicamente 8. Esto permite observar una mayor distribución de datos y un proceso de recuperación más amplio ante la falla de un DataNode.
+
+**7. ¿Qué sucede con los bloques del DataNode que falló?**
+
+HDFS detecta los bloques subreplicados y utiliza las copias disponibles para generar nuevas réplicas en otros DataNodes, restableciendo el factor de replicación configurado.
+
+**8. ¿Quién administra la ubicación y replicación de los bloques?**
+
+El NameNode, que mantiene los metadatos del sistema y coordina la replicación.
+
+**9. ¿Qué diferencia hay entre disponibilidad y cumplimiento del factor de replicación?**
+
+Un archivo puede continuar disponible con una sola réplica de cada bloque, aunque temporalmente no cumpla el factor de replicación configurado.
+
+## 7. Conclusiones
+
+Las pruebas con datasets de 1 GB y 10 GB demostraron que la replicación de bloques permitió mantener los archivos disponibles y leerlos completamente ante la caída de un DataNode. En ambos experimentos, las copias almacenadas en los nodos restantes evitaron la pérdida de acceso a los datos.
+
+Durante las verificaciones se observaron **3 de 8 bloques subreplicados** en el dataset de 1 GB y **45 de 75** en el de 10 GB, sin bloques perdidos ni corruptos. Los archivos conservaron el estado `HEALTHY`, lo que evidencia que su disponibilidad puede mantenerse aunque temporalmente no se cumpla el factor de replicación de 2.
+
+HDFS recuperó automáticamente las réplicas utilizando los DataNodes disponibles, incluso antes de reiniciar el nodo detenido. Las comprobaciones posteriores mostraron dos réplicas por bloque y cero bloques subreplicados; la verificación final confirmó la integridad de los 83 bloques de ambos archivos.
+
+El dataset de 10 GB permitió observar una recuperación de mayor alcance: requirió 57 nuevas réplicas frente a las cuatro del dataset de 1 GB. Estos resultados muestran cómo HDFS conserva la disponibilidad y restablece la redundancia cuando existen réplicas accesibles y nodos disponibles con capacidad suficiente.
