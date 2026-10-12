@@ -11,6 +11,17 @@ Práctica **LG15 · Grupo 01**. Se desplegó un clúster Hadoop HDFS con Docker 
 - [Evidencias](#5-evidencias)
 - [Preguntas](#6-preguntas)
 - [Conclusiones](#7-conclusiones)
+- [Informe completo](#informe-completo)
+
+## Integrantes
+
+- Edson Marcelo Cayo Ali
+- Joel Julio Salazar Ferrufino
+- Alex Bryam Barrera Alarcon
+
+**Universidad Privada del Valle · Tecnologías Emergentes I · Grupo B · Gestión 2/2026**
+
+**Docente:** Ing. Efrain Luna Mamani.
 
 ## 1. Arquitectura y configuración
 
@@ -82,64 +93,6 @@ flowchart LR
     Front --> NM
     Front --> JHS
     Front --> SHS
-```
-
-### Diagrama de la prueba de fallo de 1 GB
-
-```mermaid
-flowchart TB
-    A["Dataset 1 GB<br/>8 bloques - Replicación 2"]
-
-    B["Estado inicial<br/>3 DataNodes activos<br/>16 réplicas"]
-
-    C["Falla de DN2<br/>4 bloques afectados"]
-
-    D["Estado durante la falla<br/>2 DataNodes activos<br/>3 bloques subreplicados observados"]
-
-    E["HDFS recupera automáticamente<br/>4 réplicas"]
-
-    F["Estado recuperado<br/>8 bloques disponibles<br/>16 réplicas<br/>0 bloques subreplicados<br/>HEALTHY"]
-
-    A --> B
-    B --> C
-    C --> D
-    D --> E
-    E --> F
-
-    classDef falla fill:#FCE8E6,stroke:#C5221F,color:#9B1C1C
-    classDef correcto fill:#E7F4E4,stroke:#398648,color:#20552B
-
-    class C,D falla
-    class B,F correcto
-```
-
-### Diagrama de la prueba de fallo de 10 GB
-
-```mermaid
-flowchart TB
-    A["Dataset 10 GB<br/>75 bloques - Replicación 2"]
-
-    B["Estado inicial<br/>3 DataNodes activos<br/>150 réplicas"]
-
-    C["Falla de DN3<br/>57 bloques afectados"]
-
-    D["Estado durante la falla<br/>2 DataNodes activos<br/>45 bloques subreplicados observados"]
-
-    E["HDFS recupera automáticamente<br/>57 réplicas"]
-
-    F["Estado recuperado<br/>75 bloques disponibles<br/>150 réplicas<br/>0 bloques subreplicados<br/>HEALTHY"]
-
-    A --> B
-    B --> C
-    C --> D
-    D --> E
-    E --> F
-
-    classDef falla fill:#FCE8E6,stroke:#C5221F,color:#9B1C1C
-    classDef correcto fill:#E7F4E4,stroke:#398648,color:#20552B
-
-    class C,D falla
-    class B,F correcto
 ```
 
 ## 2. Instalación y preparación
@@ -289,7 +242,7 @@ La verificación final de `/grupo01` mostró **dos archivos, 83 bloques, tres Da
 | Tamaño de bloque | 128 MiB | 128 MiB |
 | Factor de replicación | 2 | 2 |
 | Distribución inicial de réplicas | DN1: 7 · DN2: 4 · DN3: 5 | DN1: 42 · DN2: 51 · DN3: 57 |
-| DataNode detenido | DN2 (`172.18.0.4`) | DN3 (`172.18.0.6`) |
+| DataNode detenido | DN2 | DN3 |
 | Bloques inicialmente afectados | 4 | 57 |
 | Bloques subreplicados observados | 3 (37,5 %) | 45 (60 %) |
 | Bloques disponibles durante la falla | 8 de 8 | 75 de 75 |
@@ -453,3 +406,7 @@ Durante las verificaciones se observaron **3 de 8 bloques subreplicados** en el 
 HDFS recuperó automáticamente las réplicas utilizando los DataNodes disponibles, incluso antes de reiniciar el nodo detenido. Las comprobaciones posteriores mostraron dos réplicas por bloque y cero bloques subreplicados; la verificación final confirmó la integridad de los 83 bloques de ambos archivos.
 
 El dataset de 10 GB permitió observar una recuperación de mayor alcance: requirió 57 nuevas réplicas frente a las cuatro del dataset de 1 GB. Estos resultados muestran cómo HDFS conserva la disponibilidad y restablece la redundancia cuando existen réplicas accesibles y nodos disponibles con capacidad suficiente.
+
+## Informe completo
+
+[Consultar el informe completo en PDF](<docs/LG15 – Tolerancia a fallos y replicación de datos en HDFS.pdf>), con el desarrollo de la práctica y las preguntas para la exposición.
