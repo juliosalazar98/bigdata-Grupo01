@@ -4,24 +4,27 @@
   <property>
     <name>dfs.replication</name>
     <value>2</value>
-    <description>Experimento: cada bloque se guarda en 2 DataNodes distintos</description>
+    <description>Single datanode does not allow for replication</description>
   </property>
-  <property>
-    <name>dfs.namenode.heartbeat.recheck-interval</name>
-    <value>30000</value>
-    <description>Experimento: un DataNode se declara muerto a los ~90 s (por defecto ~10 min 30 s)</description>
-  </property>
+
   <property>
     <name>dfs.namenode.rpc-address</name>
     <value>namenode:8020</value>
     <description>Namenode will be running on host "namenode"</description>
   </property>
+
   <property>
     <name>dfs.client.read.shortcircuit</name>
     <value>true</value>
   </property>
+  
   <property>
     <name>dfs.domain.socket.path</name>
     <value>/run/hadoop-hdfs/dn_socket</value>
+  </property>
+
+  <property>
+    <name>dfs.namenode.heartbeat.recheck-interval</name>
+    <value>10000</value>
   </property>
 </configuration>
